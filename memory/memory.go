@@ -12,18 +12,18 @@ type data struct {
 }
 
 type InMemoryStorage struct {
-	buckets    []*data
-	size       int
-	lastUsed   []*data
-	maxSizeLRU int
+	buckets         []*data
+	size            int
+	lastUsed        []*data
+	maximumCapacity int
 }
 
 func NewInMemoryStorage(maximumCapacity int, maxSizeLRU int) *InMemoryStorage {
 	return &InMemoryStorage{
-		buckets:    make([]*data, 0, maximumCapacity),
-		size:       0,
-		lastUsed:   make([]*data, 0, maxSizeLRU),
-		maxSizeLRU: maxSizeLRU,
+		buckets:         make([]*data, 0, maximumCapacity),
+		size:            0,
+		lastUsed:        make([]*data, 0, maxSizeLRU),
+		maximumCapacity: maximumCapacity,
 	}
 }
 
@@ -87,19 +87,19 @@ func (s *InMemoryStorage) evict() {
 	s.size--
 }
 
-func (s *InMemoryStorage) Set(key, value string) {
+func (s *InMemoryStorage) Set(key, value string, ttl int64) {
 
 	//if exist update
 	for index, value_bucket := range s.buckets {
 		if value_bucket.key == key {
 			s.buckets[index].value = value
-			s.buckets[index].timestamp = time.Now().UnixNano()
+			s.buckets[index].timestamp = time.Now().Unix() + int64(ttl)
 			s.updateLRU(s.buckets[index])
 			return
 		}
 	}
 
-	if s.size >= s.maxSizeLRU {
+	if s.size >= s.maximumCapacity {
 		s.evict()
 	}
 
@@ -107,9 +107,34 @@ func (s *InMemoryStorage) Set(key, value string) {
 	newData := &data{
 		key:       key,
 		value:     value,
-		timestamp: time.Now().UnixNano(),
+		timestamp: time.Now().Unix(),
 	}
 	s.buckets = append(s.buckets, newData)
 	s.size++
 	s.updateLRU(newData)
+}
+
+func (s *InMemoryStorage) Get(key string) (string, bool) {
+	for _, val := range s.buckets {
+		if val.key == key {
+
+			if val.timestamp < time.Now().Unix() {
+				s.remove(key)
+				return "", false
+			}
+			s.updateLRU(val)
+			return val.value, true
+		}
+	}
+	return "", false
+}
+
+func (s *InMemoryStorage) remove(key string) {
+	for index, value := range s.buckets {
+		if value.key == key {
+			s.size--
+			s.buckets = append(s.buckets[:index], s.buckets[index+1:]...)
+			break
+		}
+	}
 }
