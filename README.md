@@ -36,10 +36,12 @@ Table items {
 ```
 
 1. Sub queries:
+```
 SELECT * FROM items
 WHERE task_id = (SELECT id FROM tasks WHERE id = 1);
-
+```
 2. Join
+```  
 SELECT 
     t.*, 
     c.created_at AS card_created_at, 
@@ -51,7 +53,7 @@ LEFT JOIN
     cards c ON t.card_id = c.id
 LEFT JOIN 
     items i ON i.task_id = t.id
-
+```
 
 
 1. Logical correctness: Sub queries can indeed be the more logically correct way to express certain types of queries, especially when dealing with conditions based on another set of data.
