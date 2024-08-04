@@ -1,6 +1,9 @@
 package memory
 
-import "hash/fnv"
+import (
+	"hash/fnv"
+	"time"
+)
 
 type data struct {
 	key       string
@@ -9,16 +12,18 @@ type data struct {
 }
 
 type InMemoryStorage struct {
-	buckets  [][]*data
-	size     int
-	lastUsed []*data
+	buckets    []*data
+	size       int
+	lastUsed   []*data
+	maxSizeLRU int
 }
 
-func NewInMemoryStorage(maximumCapacity int, maxSize int) *InMemoryStorage {
+func NewInMemoryStorage(maximumCapacity int, maxSizeLRU int) *InMemoryStorage {
 	return &InMemoryStorage{
-		buckets:  make([][]*data, maximumCapacity),
-		size:     0,
-		lastUsed: make([]*data, 0, maxSize),
+		buckets:    make([]*data, 0, maximumCapacity),
+		size:       0,
+		lastUsed:   make([]*data, 0, maxSizeLRU),
+		maxSizeLRU: maxSizeLRU,
 	}
 }
 
@@ -43,10 +48,68 @@ func (s *InMemoryStorage) updateLRU(currentData *data) {
 func (s *InMemoryStorage) printLastUsed() {
 	println(">>>>>>>>>>>>>>>>>>>")
 	for index, value := range s.lastUsed {
-		println(index, " : ", value.key)
+		if value != nil {
+			println(index, " : ", value.key)
+		}
 	}
 	println("<<<<<<<<<<<<<<<<<<<")
 
 }
 
-func (s *InMemoryStorage) 
+func (s *InMemoryStorage) printBuckets() {
+	println(">>>>buckets>>>>>>>>>>>>>")
+	for index, value := range s.buckets {
+		if value != nil {
+			println(index, " : ", value.key)
+		}
+	}
+	println("<<<<buckets<<<<<<<<<<<<")
+}
+
+// remove last item ( least recently used ) from the cache
+func (s *InMemoryStorage) evict() {
+	if len(s.lastUsed) == 0 {
+		return
+	}
+
+	lru := s.lastUsed[len(s.lastUsed)-1]
+
+	for index, value := range s.buckets {
+		if value != nil {
+			if value.key == lru.key {
+				s.buckets = append(s.buckets[:index], s.buckets[index+1:]...)
+				break
+			}
+		}
+	}
+
+	s.lastUsed = s.lastUsed[:len(s.lastUsed)-1]
+	s.size--
+}
+
+func (s *InMemoryStorage) Set(key, value string) {
+
+	//if exist update
+	for index, value_bucket := range s.buckets {
+		if value_bucket.key == key {
+			s.buckets[index].value = value
+			s.buckets[index].timestamp = time.Now().UnixNano()
+			s.updateLRU(s.buckets[index])
+			return
+		}
+	}
+
+	if s.size >= s.maxSizeLRU {
+		s.evict()
+	}
+
+	// add new entity
+	newData := &data{
+		key:       key,
+		value:     value,
+		timestamp: time.Now().UnixNano(),
+	}
+	s.buckets = append(s.buckets, newData)
+	s.size++
+	s.updateLRU(newData)
+}
